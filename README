@@ -1,7 +1,0 @@
-本project为6.824 labs
-lab1为mapreduce的一个统计单词的示例实现
-lab2为实现raft协议
-lab3为实现一个简单但提供replication的kv服务，同时支持snapshot
-lab4为实现一个可以实现shard拆分的kv服务
-参考了 https://www.jianshu.com/p/f5c8ab9cd577
-      https://github.com/hey-kong/6.824

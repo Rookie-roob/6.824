@@ -1,0 +1,15 @@
+* 首先一个很重要的点是raft层是可以把同样的命令commit多次的！！！但是在server层只能apply一次！！！（考虑如果server层多次apply相同命令，对于append连续两次的情况）
+* 为什么在应用到server的state machine之前要进行term的判断？
+* 新当选的 Leader 的 Log 中还存在已提交未应用的 command，若不进行判断就会尝试向并不存在的 RPC Handler 转发数据并造成阻塞。这种情况解决起来也比较简单，不属于当前 term 的 command 无需转发，直接给状态机应用就可以了。
+* 那么对于之前term大多数server都已经落到log上，而且已经commit，在即将从raft层到server的state machine时，新的term开始了呢？
+* 新的leader肯定是会包含这个commit后但还没apply的log的，因此会在新leader进行apply，对于client，会超时重发，最后在新的leader那儿得到apply的结果。
+* commit过后的日志条目肯定会一直在之后的leader中，而且leader只会append日志（除了快照），在leader中commit的顺序就是我们操作的顺序，所以我们的notifychan以commitIndex作为字典的key！
+* 一定要注意Server中的args传到raft的start中时，不能直接传引用，这样会直接导致到了raft中的为server层中的引用，之后会直接空指针异常！要把里面的key，value等值拷贝到op中
+* apply statemachine这个操作是每个server都需要的！（但是不能重复apply到状态机）但是响应 rpc只有leader才行
+* 为什么需要上锁？
+* Get，PutAppend协程会读取及修改commandMap以及notifyChan，而processApplyFromRaft也会对于其中的成员进行访问及修改，这里的一个优化是对哦于commandMap可以是可以上读锁的，多个读不影响。
+* 在有snapshot的情况下，lastIncludedIndex以及lastIncludedTerm也要持久化，不然reboot后根本就不知道日志index开始点
+* raft server reboot时还要对于lastApplied以及commitIndex进行重新赋值，因为snapshot后lastApplied以及commitIndex可能不是从0开始
+* 每个server都会进行主动snapshot的！！！写代码的时候不要写成只有leader才会！
+* snapshot的receiver（也就是在被动snapshot时）对于新的commitIndex以及lastApplied注意要取最大值，因为可能此时receiver的日志也在涨的！！！
+* kv层不应该直接去获取raft层中的锁，本代码中具体体现在kv层去读取raft层的大小，即checkSnapshot()，不要在这个函数中去获取raft层中的锁，因为本身RaftStateSize()就会去获取ps中的锁，而ps也在raft层中，很可能导致死锁！！！所以这里最好的处理应该是新增ps的一个成员persister，此时只需一个ps的锁就行！！！避免了死锁！！！！
